@@ -1,0 +1,793 @@
+﻿<html>
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/> 
+    <title>Decovent - Python events rising and handling using decorators</title>
+    <link rel="stylesheet" href="style.css"></link>
+</head>
+<body><a name="top"></a>
+    <h1>Decovent - Documentation</h1>
+    <h3>Python events rising and handling using decorators</h3>
+    <h4>Python 2.6.4 & Python 3.1.1</h4>
+     
+    <div class="version">Version: 1.1.1<br/>
+    Last Updated: May 20th, 2010</div><br/>
+
+<div class="topnav">
+<ul><li><a href="#description">Description</a>
+	<li><a href="#download">Download</a>
+    <li>New in this version
+        <ul>        
+        <li>Private methods have been made public to facilitate inheritance
+        </ul>
+    <li><a href="#how_to">Examples</a>
+	    <ul>	    
+	    <li><a href="#how_to_00">How to import Decovent</a>
+	    <li><a href="#how_to_01">How to create and raise an event</a>
+	    <li><a href="#how_to_02">How to create and register a handler</a>
+	    <li><a href="#how_to_03">How to create a class that handles it own events</a>    
+	    <li><a href="#how_to_04">How to create a class that handles the events of another class</a>
+	    <li><a href="#how_to_05">How to create a @classmethod event or handler</a>
+	    <li><a href="#how_to_06">How to raise and handle events with different names than the decorated method name</a>
+	    <li><a href="#how_to_07">How to raise and handle events with non-ASCII names</a>
+	    <li><a href="#how_to_08">How to execute handlers synchronous or asynchronous</a>	    
+	    <li><a href="#how_to_09">How to retrieve the execution result of an event and its handlers</a>
+	    <li><a href="#how_to_10">How to unregister a handler after its first execution</a>
+	    <li><a href="#how_to_11">How to unregister handlers at various levels</a>	    
+	    <li><a href="#how_to_12">How to integrate events and handlers with custom decorators</a>
+	    <li><a href="#how_to_13">How to memoize events and handlers</a>
+	    <li><a href="#how_to_14">How to synchronize events and handlers</a>
+	    <li><a href="#how_to_15">How to control the execution time of an event or handler</a>
+	    <li><a href="#how_to_16">How to control the number of active parallel executions</a>
+	    </ul>    
+    <li><a href="#module_internals">Internals</a>
+	    <ul>
+	    <li><a href="#classes">Classes</a>    
+	    <li><a href="#attributes">Attributes</a>
+	    <li><a href="#execution_model">Execution model</a>
+	    <li><a href="#execution_result">Execution result</a>
+	    <li><a href="#helpers">Helpers</a>	    
+	    <li><a href="#storage_model">Storage model</a>
+	    </ul>
+</ul>
+</div><br/>
+
+<a name="description"></a>
+<h3>Description</h3> 
+Decovent is a very small Python library that allows an easy and elegant events 
+rising and handling, using decorators. <br/><br/>
+<ul><li>Features:
+    <ul><li>Decovent has been tested with Python's both productive versions, 
+    	<span class="key">Python 2.6.4</span> and <span class="key">Python 3.1.1</span>
+    	<li>events and handlers are tied to the local-thread
+	    <li>event name is case sensitive, Unicode safe and not required if it 
+	    equals the decorated method name
+	    <li>for an event can be registered as many handlers as necessary    
+		<li>handlers are registered for (class, event) pair, to differentiate between 
+		events with similar names, but raised by different classes
+		<li>a handler can be registered many times, but will be executed only 
+		once for (class, event) pair 
+		<li>handlers execution order is the same as the registration order
+		<li>handlers are always executed in parallel threads, synchronous or asynchronous
+		<li>parameters received by the handlers are being sent by the event
+		<li>no arguments are required for a handler at registration time
+		<li>a handler can be flagged to run only once for an event and then unregister itself 	
+		<li><span class="key">@classmethod</span>s can be raised as events or 
+		registered as handlers
+		<li>events and handlers can be memoized at local or global level 
+		<li>events and handlers can be synchronized on the same lock	
+		<li>the time allocated for the execution of an event or handler is controllable
+		<li>the number of methods that can be executed in parallel is controllable
+	</ul>
+	<br>
+    <li>Restrictions:
+    <ul><li>events and handlers must be methods that belong to new-style classes
+        <li><span class="key">@staticmethod</span>s can’t be raised as events or registered as handlers
+        <li>one handler can be registered for only one event 
+    </ul>	
+</ul>
+It's important to understand that events and handlers are not classes, 
+but decorated methods that may belong to any new-style class. There are 
+no restrictions on the class itself regarding inheritance or the interfaces 
+that are implemented.<br/><br/>
+<a href="#top">top</a>
+
+
+<a name="download"></a>
+<h3>Download</h3> 
+The latest version of Decovent can be downloaded from  
+<a href="http://pypi.python.org/pypi/Decovent">http://pypi.python.org/pypi/Decovent</a>.<br/><br/>
+<a href="#top">top</a>
+
+
+<a name="how_to"></a>
+<h3>Examples</h3>
+
+<a name="how_to_00"></a>
+<h4>How to import Decovent</h4>
+<pre class="section">
+<span class="key">from</span> decovent <span class="key">import</span> *    #the only required import 
+</pre>
+<a href="#top">top</a>
+
+
+<a name="how_to_01"></a>
+<h4>How to create and raise an event</h4>
+<pre class="section">
+<span class="key">class</span> Mouse(object):
+    <span class="deco">@raise_event</span>()
+    <span class="key">def</span> click(self, x, y):
+        <span class="key">return</span> (x, y)
+        
+mouse = Mouse()
+mouse.click(10, 20)
+</pre>
+<a href="#top">top</a>
+
+
+<a name="how_to_02"></a>
+<h4>How to create and register a handler</h4>
+<pre class="section">
+<span class="key">class</span> Mouse(object):
+    <span class="deco">@set_handler</span>(<span class="event">'click'</span>)
+    <span class="key">def</span> on_click(self, x, y):  
+        <span class="key">return</span> (x, y)
+        
+mouse = Mouse()
+mouse.on_click()    #no arguments at registration
+</pre>
+<a href="#top">top</a>
+
+
+<a name="how_to_03"></a>
+<h4>How to create a class that handles it own events</h4>
+<pre class="section">
+<span class="key">class</span> Mouse(object):
+    <span class="key">def</span> __init__(self):
+        self.on_click()
+
+    <span class="deco">@raise_event</span>()
+    <span class="key">def</span> click(self, x, y):
+        <span class="key">return</span> (x, y)
+
+    <span class="deco">@set_handler</span>(<span class="event">'click'</span>)
+    <span class="key">def</span> on_click(self, x, y):
+        <span class="key">return</span> (x, y)
+        
+mouse = Mouse()
+mouse.click(10, 20)
+</pre>
+<a href="#top">top</a>
+
+
+<a name="how_to_04"></a>
+<h4>How to create a class that handles the events of another class</h4>
+<pre class="section">
+<span class="key">class</span> Mouse(object):
+    <span class="deco">@raise_event</span>()
+    <span class="key">def</span> click(self, x, y):
+        <span class="key">return</span> (x, y)
+
+<span class="key">class</span> Screen(object):
+    <span class="deco">@set_handler</span>(<span class="event">'click'</span>, Mouse)
+    <span class="key">def</span> on_click(self, x, y):
+        <span class="key">return</span> (x, y)
+        
+screen = Screen()
+screen.on_click()
+         
+mouse = Mouse()
+mouse.click(10, 20)
+</pre>
+<a href="#top">top</a>
+
+
+<a name="how_to_05"></a>
+<h4>How to create a @classmethod event or handler </h4>
+<ul><li><span class="key">@classmethod</span> decorator must always be placed
+    before <span class="key">@raise_event</span> or <span class="key">@set_handler</span>
+    <li>It is not required that a class method event has to be handled by a class method handler or
+    the other way around.
+    <li><span class="key">@staticmethod</span> can't be raised as events or 
+        registered as handlers because they don't provide <span class="key">self.__class__</span> 
+        in the arguments. <br/>Without this information is impossible to determine 
+        to which class the raised event belongs.
+</ul>
+<pre class="section">
+<span class="key">class</span> Mouse(object):
+    <span class="key">def</span> __init__(self):
+        self.on_click()
+        
+    <span class="deco">@classmethod</span>      
+    <span class="deco">@raise_event</span>()
+    <span class="key">def</span> click(self, x, y):
+        <span class="key">return</span> (x, y)
+
+    <span class="deco">@set_handler</span>(<span class="event">'click'</span>)
+    <span class="key">def</span> on_click(self, x, y):
+        <span class="key">return</span> (x, y)
+        
+Mouse.click()
+</pre>
+
+<pre class="section">
+<span class="key">class</span> Mouse(object):
+    <span class="deco">@classmethod</span>
+    <span class="deco">@raise_event</span>()
+    <span class="key">def</span> click(self, x, y):
+        <span class="key">return</span> (x, y)
+
+<span class="key">class</span> Screen(object):
+    <span class="deco">@classmethod</span>
+    <span class="deco">@set_handler</span>(<span class="event">'click'</span>, Mouse)
+    <span class="key">def</span> on_click(self, x, y):
+        <span class="key">return</span> (x, y)
+        
+Screen.on_click()
+Mouse.click(10, 20)
+</pre>
+<ul>     
+</ul>
+<a href="#top">top</a>
+
+
+<a name="how_to_06"></a>
+<h4>How to raise and handle events with different names than the decorated method name</h4>
+<pre class="section">
+<span class="key">class</span> Mouse(object):
+    <span class="key">def</span> __init__(self):
+        self.on_move()
+
+    <span class="deco">@raise_event</span>(<span class="event">'move'</span>)
+    <span class="key">def</span> click(self, x, y):
+        <span class="key">return</span> (x, y)
+
+    <span class="deco">@set_handler</span>(<span class="event">'move'</span>)
+    <span class="key">def</span> on_move(self, x, y):
+        <span class="key">return</span> (x, y)
+        
+mouse = Mouse()
+mouse.click(10, 20)
+</pre>
+<a href="#top">top</a>
+
+ 
+<a name="how_to_07"></a>
+<h4>How to raise and handle events with non-ASCII names</h4>
+<pre class="section">
+<span class="key">class</span> Mouse(object):
+    <span class="key">def</span> __init__(self):
+        self.on_move()
+
+    <span class="deco">@raise_event</span>(<span class="event">'щелкать'</span>)
+    <span class="key">def</span> click(self, x, y):
+        <span class="key">return</span> (x, y)
+
+    <span class="deco">@set_handler</span>(<span class="event">'щелкать'</span>)
+    <span class="key">def</span> on_click(self, x, y):
+        <span class="key">return</span> (x, y)
+        
+mouse = Mouse()
+mouse.click(10, 20)
+</pre>
+<a href="#top">top</a>
+
+
+<a name="how_to_08"></a>
+<h4>How to execute handlers synchronous or asynchronous</h4>
+<ul><li>By default, handlers are executed synchronous in parallel threads. 
+        To execute them asynchronous, set <span class="key">decovent.asynchronous</span> 
+        = <span class="key">True</span>.<br/>
+        See <a href="#attributes">Attributes</a> section for more details 
+</ul>
+<a href="#top">top</a>
+
+
+<a name="how_to_09"></a>
+<h4>How to retrieve the execution result of an event and registered handlers</h4>
+<ul><li>See <a href="#execution_result">Execution result</a> section for details 
+</ul>
+
+<pre class="section">
+<span class="key">class</span> Mouse(object):
+    <span class="key">def</span> __init__(self):
+        self.on_click()
+
+    <span class="deco">@raise_event</span>()
+    <span class="key">def</span> click(self, x, y):
+        <span class="key">return</span> (x, y)
+
+    <span class="deco">@set_handler</span>(<span class="event">'click'</span>)
+    <span class="key">def</span> on_click(self, x, y):
+        <span class="key">return</span> (x, y)
+        
+mouse = Mouse()
+e_result, h_result = mouse.click(10, 20)
+
+pprint(e_result)
+pprint(h_result)
+
+>>(True, (10, 20), &lt;class '__main__.Mouse'&gt;, &lt;function click at 0x00BC5F30&gt;)
+>>((True, (10, 20), &lt;class '__main__.Mouse'&gt;, &lt;function on_click at 0x00BC5FB0&gt;),)
+
+</pre>
+<pre class="section">
+decovent.exc_info = <span class="key">True</span>  
+decovent.traceback = <span class="key">True</span>  
+
+<span class="key">class</span> Mouse(object):
+    <span class="key">def</span> __init__(self):
+        self.on_click()
+
+    <span class="deco">@raise_event</span>()
+    <span class="key">def</span> click(self, x, y):
+        <span class="key">return</span> (x, y)
+
+    <span class="deco">@set_handler</span>(<span class="event">'click'</span>)
+    <span class="key">def</span> on_click(self, x, y):
+        <span class="key">raise</span> TypeError(<span class="event">'Wrong values'</span>)
+        
+mouse = Mouse()
+e_result, h_result = mouse.click(10, 20)
+
+pprint(e_result)
+pprint(h_result)
+
+>>(True, (10, 20), &lt;class '__main__.Mouse'&gt;, &lt;function click at 0x00BC5F30&gt;)
+>>((False,
+>>  (&lt;type 'exceptions.TypeError'&gt;,
+>>   TypeError('Wrong values',),
+>>   &lt;traceback object at 0x00BB4468&gt;),
+>>  &lt;class '__main__.Mouse'&gt;,
+>>  &lt;function on_click at 0x00BC5FB0&gt;),)
+
+</pre>
+<a href="#top">top</a>
+
+
+<a name="how_to_10"></a>
+<h4>How to unregister a handler after its first execution</h4>
+<ul><li>See <a href="#classes">Classes</a> section for details 
+</ul>
+
+<pre class="section">
+<span class="key">class</span> Mouse(object):
+    <span class="key">def</span> __init__(self):
+        self.on_click()
+
+    <span class="deco">@raise_event</span>()
+    <span class="key">def</span> click(self, x, y):
+        <span class="key">return</span> (x, y)
+
+    <span class="deco">@set_handler</span>(<span class="event">'click'</span>, unregister=<span class="key">True</span>)
+    <span class="key">def</span> on_click(self, x, y):
+        <span class="key">return</span> (x, y)
+</pre>
+<a href="#top">top</a>
+
+
+<a name="how_to_11"></a>
+<h4>How to unregister handlers at various levels</h4>
+<ul><li>See <a href="#helpers">Helpers</a> section for details 
+</ul>
+
+<pre class="section">
+<span class="key">class</span> Mouse(object):
+    <span class="key">def</span> __init__(self):
+        self.on_click()
+
+    <span class="deco">@raise_event</span>()
+    <span class="key">def</span> click(self, x, y):
+        <span class="key">return</span> (x, y)
+
+    <span class="deco">@set_handler</span>(<span class="event">'click'</span>, unregister=<span class="key">True</span>)
+    <span class="key">def</span> on_click(self, x, y):
+        <span class="key">return</span> (x, y)
+
+decovent.reset(Mouse, <span class="event">'click'</span>)  #remove handlers for Mouse().click() 
+decovent.reset(Mouse)           #remove handlers for Mouse()
+decovent.reset()                #remove handlers for any class        
+</pre>
+<a href="#top">top</a>
+
+
+<a name="how_to_12"></a>
+<h4>How to integrate events and handlers with custom decorators</h4>
+As opposed to most decorators, that will check some conditions before the 
+decorated method is executed, Decovent executes the decorated event and handler 
+methods and returns the results. The execution occurs only when the event is being 
+raised. If you need to decorate a method and in the same time raise it as an event 
+or register it as a handler, a few points have to be considered:
+
+<ul><li>it is recommended that <span class="key">raise_event</span> or 
+<span class="key">set_handler</span> to be the last decorator in the stack
+<pre class="section">
+<span class="key">class</span> Mouse(object):
+    <span class="deco">@some_decorator</span>
+    <span class="deco">@another_decorator</span>
+    <span class="deco">@raise_event</span>()
+    <span class="key">def</span> click(self, x, y):
+        <span class="key">return</span> (x, y)
+</pre>
+<li>if you want to decorate a handler, please note that these decorators 
+will be executed at handler's registration time.
+
+<pre class="section">
+
+authorizations = [<span class="deco">'do_click'</span>, <span class="deco">'do_move'</span>]
+
+<span class="key">class</span> authorize(object):
+    <span class="deco">""" Authorization check decorator """</span>
+    <span class="key">def</span> __init__(self, auth_object):
+        self.auth_object = auth_object
+        
+    <span class="key">def</span> __call__(self, f):
+        <span class="key">def</span> auth_f(*args, **kwargs):
+            <span class="key">if</span> self.auth_object <span class="key">in</span> authorizations:
+                <span class="key">return</span> f(*args, **kwargs)
+            <span class="key">else</span>:
+                <span class="key">raise</span> Exception(<span class="deco">'Unauthorized'</span>)
+        <span class="key">return</span> auth_f
+
+
+<span class="key">class</span> Mouse(object):        
+    <span class="deco">@classmethod</span>
+    <span class="deco">@authorize</span>(<span class="deco">'do_click'</span>)    
+    <span class="deco">@raise_event</span>()
+    <span class="key">def</span> click(self, x, y):
+        <span class="key">return</span> (x, y)
+                    
+    <span class="deco">@classmethod</span>    
+    <span class="deco">@authorize</span>(<span class="deco">'do_click'</span>)
+    <span class="deco">@set_handler</span>(<span class="deco">'click'</span>)    
+    <span class="key">def</span> on_click(self, x, y):        
+        <span class="key">return</span> (x, y)
+
+
+Mouse.on_click()                #<span class="deco">@authorize</span>() will be executed here
+pprint(Mouse.click(10, 20))     #<span class="deco">@authorize</span>() will NOT be executed here
+
+>>((True, (10, 20), &lt;class '__main__.Mouse'&gt;, &lt;function click at 0x00BCAFB0&gt;),
+>> ((True,
+>>   (10, 20),
+>>   &lt;class '__main__.Mouse'&gt;,
+>>   &lt;function on_click at 0x00BD10B0&gt;),))
+</pre>
+
+<li><span class="key">raise_event</span> or <span class="key">set_handler</span>
+    will not work with decorators that also execute the decorated method and
+    return the execution result. This is actually a good side-effect as it will 
+    prevent the same method to be executed several times by each of these decorators.   
+</ul>
+<a href="#top">top</a>
+
+
+<a name="how_to_13"></a>
+<h4>How to memoize events and handlers</h4>
+
+<a href="http://en.wikipedia.org/wiki/Memoization">http://en.wikipedia.org/wiki/Memoization</a></br></br>
+
+Memoization can be activated at local or global level. 
+When the global level is active, will overwrite the local level.
+To activate memoization at local level, set parameter <span class="key">memoize_</span> of 
+<span class="key">set_handler</span> or <span class="key">raise_event</span> to 
+<span class="key">True</span>. To activate it at global level, 
+set <span class="key">decovent.memoize</span> = <span class="key">True</span>.
+Only successful executions are memoized<br/> <br/> 
+Please make sure you actually need memoization (especially at global level), 
+otherwise might be just overhead.
+
+<pre class="section">
+decovent.memoize = <span class="key">True</span>    #global
+
+<span class="key">class</span> Mouse(object):
+    <span class="deco">@raise_event</span>()
+    <span class="key">def</span> click(self, x, y):
+        <span class="key">return</span> (x, y)
+</pre>
+or
+<pre class="section">
+<span class="key">class</span> Mouse(object):
+    <span class="deco">@raise_event</span>(memoize_=<span class="key">True</span>)  #local
+    <span class="key">def</span> click(self, x, y):
+        <span class="key">return</span> (x, y)
+</pre>
+<a href="#top">top</a>
+
+
+<a name="how_to_14"></a>
+<h4>How to synchronize events and handlers</h4>
+<a href="http://en.wikipedia.org/wiki/Synchronization_(computer_science)#Process_synchronization">http://en.wikipedia.org/wiki/Synchronization_(computer_science)#Process_synchronization</a></br></br>
+To synchronize execution of an event and registered handlers on the same lock, 
+an external threading.RLock() has to be provided for 
+<span class="key">lock</span> argument of
+<span class="key">raise_event</span>.<br/> <br/> 
+Please make sure you understand the difference between running handlers 
+synchronous/asynchronous and synchronization, otherwise you may cause yourself
+performance issues. 
+
+
+<pre class="section">
+lock = threading.RLock()
+
+<span class="key">class</span> Mouse(object):
+    <span class="deco">@raise_event</span>(lock=lock)
+    <span class="key">def</span> click(self, x, y):
+        <span class="key">return</span> (x, y)
+</pre>
+    
+
+<a href="#top">top</a>
+
+
+<a name="how_to_15"></a>
+<h4>How to control the execution time of an event or handler</h4>
+The execution time allocated for an event or handler can be controlled by
+setting the <span class="key">timeout</span> argument of
+<span class="key">raise_event</span> or <span class="key">set_handler</span>, 
+to the desired limit (positive integer or float). 
+If the limit is reached before the execution ends, a RuntimeError is
+raised and stored in the execution result of the corresponding event or handler.<br/><br/>
+
+Please note that a new thread is created for each method that has a restricted
+execution interval.
+<pre class="section">
+<span class="key">class</span> Mouse(object):
+    <span class="key">def</span> __init__(self):
+        self.on_click()
+        self.long_on_click()
+        self.err_on_click()
+        
+    <span class="deco">@raise_event</span>(timeout=1)
+    <span class="key">def</span> click(self, x, y):        
+        <span class="key">return</span> (x, y)
+        
+    <span class="deco">@set_handler</span>(<span class="event">'click'</span>, timeout=1)
+    <span class="key">def</span> on_click(self, x, y):        
+        <span class="key">return</span> (x, y) 
+
+    <span class="deco">@set_handler</span>(<span class="event">'click'</span>, timeout=1)
+    <span class="key">def</span> long_on_click(self, x, y):
+        sleep(2)        
+        <span class="key">return</span> (x, y) 
+
+    <span class="deco">@set_handler</span>(<span class="event">'click'</span>, timeout=1)
+    <span class="key">def</span> err_on_click(self, x, y):
+        <span class="key">raise</span> TypeError(<span class="event">'Wrong values'</span>)         
+
+mouse = Mouse()
+pprint(mouse.click(10, 20))
+
+>>((True, (10, 20), &lt;class '__main__.Mouse'&gt;, &lt;function click at 0x00BCA030&gt;),
+>> ((False,
+>>   (&lt;type 'exceptions.TypeError'&gt;,
+>>    TypeError('Wrong values',),
+>>    &lt;traceback object at 0x00BCB1E8&gt;),
+>>   &lt;class '__main__.Mouse'&gt;,
+>>   &lt;function err_on_click at 0x00BCA1B0&gt;),
+>>  (True,
+>>   (10, 20),
+>>   &lt;class '__main__.Mouse'&gt;,
+>>   &lt;function on_click at 0x00BCA0B0&gt;),
+>>  (False,
+>>   (&lt;type 'exceptions.RuntimeError'&gt;,
+>>    RuntimeError('[Thread-6] Execution was forcefully terminated',),
+>>    &lt;traceback object at 0x00BCB288&gt;),
+>>   &lt;class '__main__.Mouse'&gt;,
+>>   &lt;function long_on_click at 0x00BCA130&gt;)))
+</pre>
+<a href="#top">top</a>
+
+
+<a name="how_to_16"></a>
+<h4>How to control the number of active parallel executions</h4>
+To control the number of methods that can be executed in parallel at one time,
+you may use method <span class="key">decovent.active(value)</span>. By default,
+maximum 3 methods are allowed to run in parallel. 
+
+<pre class="section">
+decovent.active(5)	# max. 5 methods are executed in parallel  
+</pre>
+    
+
+<a href="#top">top</a>
+
+
+<a name="module_internals"></a>
+<h3>Internals</h3> 
+
+<a name="classes"></a>
+<h3>Classes</h3>
+<ul><li><span class="key">raise_event</span>
+	<ul><li>constructor parameters
+		<ul><li>event - event to be raised. Optional, defaults to the decorated method name.			
+		    <li>memoize_ - caches the event execution result. Optional, defaults to <span class="key">False</span>.
+		    <li>lock - synchronizes execution of the event and registered handlers, 
+		    must be a threading.RLock(), if provided.
+		    Optional, defaults to <span class="key">None</span>.
+		    <li>timeout - restricts the time allocated for execution. 
+		    Optional, defaults to <span class="key">None</span>.  
+		</ul>	
+	</ul>
+	<li><span class="key">set_handler</span>
+	<ul><li>constructor parameters
+		<ul><li>event - event name, required.
+			<li>class_ - event owner class. Optional, defaults to <span class="key">None</span> (assumes the current class).
+			<li>unregister - if True the handler is unregistered after its first execution. Optional, defaults to <span class="key">False</span>.
+            <li>memoize_ - caches the handler execution result. Optional, defaults to <span class="key">False</span>.
+            <li>timeout - restricts the time allocated for execution. 
+		    Optional, defaults to <span class="key">None</span>. 
+		</ul>	
+	</ul>
+	<li><span class="key">spawn_thread</span>
+	<ul><li>constructor parameters
+		<ul><li>target - target method
+			<li>args - arguments passed to target at run-time
+			<li>kwargs - arguments passed to target at run-time 
+			<li>default - result returned if the thread is interrupted
+		</ul>
+	</ul>	
+</ul>
+<a href="#top">top</a>
+
+
+<a name="attributes"></a>
+<h3>Attributes</h3>
+<ul><li><span class="key">decovent.asynchronous</span> 
+		<ul><li>if <span class="key">True</span>, handlers are executed asynchronous. Default is <span class="key">False</span>.</ul>                                                                 
+    <li><span class="key">decovent.debug</span>
+    	<ul><li>if <span class="key">True</span>, logging is active. Logger's name is 
+        'decovent'. Default is <span class="key">False</span>.</ul> 
+    <li><span class="key">decovent.encoding</span>
+    	<ul><li>encoding used for event name encoding. 
+        Default is 'UTF-8'.</ul>  
+    <li><span class="key">decovent.errors</span>
+    	<ul><li>encoding errors mode. Default is <span class="key">strict</span>.</ul>
+    <li><span class="key">decovent.exc_info</span>
+    	<ul><li>if <span class="key">True</span>, sys.exc_info()[:2] is available on error, 
+        for event execution and synchronous handler execution. 
+        Default is <span class="key">False</span>.</ul>
+    <li><span class="key">decovent.memoize</span>
+        <ul><li>activates memoization at global level. Default is <span class="key">False</span>.</ul>      
+    <li><span class="key">decovent.threads</span>
+    	<ul><li>maximum number of threads that must be started 
+        for handlers execution. The actual number of started threads is the 
+        smallest value comparing decovent.threads and handlers count. 
+        Default is 3.</ul>
+    <li><span class="key">decovent.traceback</span>
+        <ul><li>if <span class="key">True</span>, the traceback (complete sys.exc_info()) will be provided 
+        in the execution result in case of error. Default is <span class="key">False</span>.<br/>
+        <span class="key">decovent.exc_info</span> must be <span class="key">True</span>
+        in order to receive any error details.        
+        </ul>                    
+</ul>
+<a href="#top">top</a>
+
+
+<a name="execution_model"></a>
+<h3>Execution model</h3>
+<ul><li>events are always executed synchronous in the current thread
+    <li>handlers are always executed in parallel threads and may be 
+        executed asynchronous. By default the execution is synchronous.
+</ul>
+
+<a href="#top">top</a>
+
+<a name="execution_result"></a>
+<h3>Execution result</h3>
+<ul><li>the result of the event and handlers execution is returned as a 
+        <span class="key">tuple (e_result, h_result)</span> when the event is being raised<br/>
+    <li><span class="key">e_result</span> is a tuple that contains:
+        <ul><li><span class="key">on success</span>: (<span class="key">True</span>, result, class, method)
+            <li><span class="key">on error</span>: (<span class="key">False</span>, error, class, method)</ul>                   
+    <li><span class="key">h_result</span> is a tuple that contains, for each handler:
+        <ul><li>if execution is <span class="key">synchronous</span>
+            <ul><li><span class="key">on success</span>: (<span class="key">True</span>, result, class, method)
+                <li><span class="key">on error</span>: (<span class="key">False</span>, error, class, method)
+            </ul>
+        </ul>
+        <ul><li>if execution is <span class="key">asynchronous</span>
+            <ul><li>(<span class="key">None</span>, <span class="key">None</span>, class, method)</ul>
+        </ul>
+<pre class="section">
+<span class="key">class</span> Mouse(object):
+    <span class="key">def</span> __init__(self):
+        self.on_click()
+        self.long_on_click()
+        self.err_on_click()
+        
+    <span class="deco">@raise_event</span>(timeout=1)
+    <span class="key">def</span> click(self, x, y):        
+        <span class="key">return</span> (x, y)
+        
+    <span class="deco">@set_handler</span>(<span class="event">'click'</span>, timeout=1)
+    <span class="key">def</span> on_click(self, x, y):        
+        <span class="key">return</span> (x, y) 
+
+    <span class="deco">@set_handler</span>(<span class="event">'click'</span>, timeout=1)
+    <span class="key">def</span> long_on_click(self, x, y):
+        sleep(2)        
+        <span class="key">return</span> (x, y) 
+
+    <span class="deco">@set_handler</span>(<span class="event">'click'</span>, timeout=1)
+    <span class="key">def</span> err_on_click(self, x, y):
+        <span class="key">raise</span> TypeError(<span class="event">'Wrong values'</span>)         
+
+mouse = Mouse()
+pprint(mouse.click(10, 20))
+
+>>((True, (10, 20), &lt;class '__main__.Mouse'&gt;, &lt;function click at 0x00BCA030&gt;),
+>> ((False,
+>>   (&lt;type 'exceptions.TypeError'&gt;,
+>>    TypeError('Wrong values',),
+>>    &lt;traceback object at 0x00BCB1E8&gt;),
+>>   &lt;class '__main__.Mouse'&gt;,
+>>   &lt;function err_on_click at 0x00BCA1B0&gt;),
+>>  (True,
+>>   (10, 20),
+>>   &lt;class '__main__.Mouse'&gt;,
+>>   &lt;function on_click at 0x00BCA0B0&gt;),
+>>  (False,
+>>   (&lt;type 'exceptions.RuntimeError'&gt;,
+>>    RuntimeError('[Thread-6] Execution was forcefully terminated',),
+>>    &lt;traceback object at 0x00BCB288&gt;),
+>>   &lt;class '__main__.Mouse'&gt;,
+>>   &lt;function long_on_click at 0x00BCA130&gt;)))
+</pre>
+</ul> 
+<a href="#top">top</a>
+
+
+<a name="helpers"></a>
+<h3>Helpers</h3>
+<ul><li><span class="key">decovent.active</span>(value)
+		<ul><li>using this method, you can control the number of methods that 
+				are executed in parallel at one time. By default, maximum 3
+				methods can be executed at one time.
+		</ul>
+</ul>
+<ul><li><span class="key">decovent.reset</span>(class_=<span class="key">None</span>, 
+												event=<span class="key">None</span>)
+		<ul><li>using this method, handlers can be unregistered at the following levels
+			<ul><li>if <span class="key">class_</span> and <span class="key">event</span>  
+        			are provided, all registered handlers for this pair are unregistered
+      			<li>if only <span class="key">class_</span> is provided, all registered 
+      				handlers for this class are unregistered
+      			<li>if no arguments are provided, all registered handlers for any class are unregistered      				
+			</ul>
+			<li>Note that a <span class="key">class</span> not an 
+			<span class="key">instance</span> has to be provided
+		</ul>        
+</ul>
+<a href="#top">top</a>
+
+
+<a name="storage_model"></a>
+<h3>Storage model</h3>
+<ul><li>events are stored in a thread-local dictionary, <span class="key">decovent._local.events</span>
+    <li>the following structure is used to store the events: 
+<pre class="section">
+events = { 
+    hash:((event, handler_class, handler, unregister, memoize, timeout), 
+          (event, handler_class, handler, unregister, memoize, timeout),  
+         ...),
+    hash:((event, handler_class, handler, unregister, memoize, timeout), 
+          (event, handler_class, handler, unregister, memoize, timeout), 
+         ...),
+    ...}
+</pre>
+    <li>if memoization is active at any level, the following <span class="key">decovent._memoize</span> structure is used as cache:
+<pre class="section">
+memoize = { 
+    hash: ((args, kwargs, result), 
+           (args, kwargs, result),
+            ...), 
+    hash: ((args, kwargs, result),
+           (args, kwargs, result),  
+            ...),                       
+    ...} 
+</pre>     
+</ul>
+
+<a href="#top">top</a>
+</body>
+</html>

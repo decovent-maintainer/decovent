@@ -1,0 +1,76 @@
+body { 
+    font-family: sans-serif, Arial, Tahoma, Geneva;
+    font-size:10pt;    
+    background-color: #fff;
+} 
+
+a { text-decoration: none; color:#2929ff;}
+a:visited  { color: #2929ff;}
+a:hover { color: #600060;}
+
+h1 {
+    font-size:16pt;
+    font-weight:bold;
+}
+
+h2 {
+    font-size:14pt;
+    font-weight:bold;
+    margin:10px 0px 10px 0px;
+}
+h3 {
+    font-size:12pt;
+    font-weight:bold;
+    margin:10px 0px 10px 0px;
+}
+h4 {
+    font-size:10pt;
+    font-weight:bold;
+    margin:10px 0px 10px 0px;
+}
+
+li {
+    margin:1px 0px 1px 0px;
+}
+
+.topnav li {
+    font-size:9pt;
+    list-style-type:none;
+    line-height:11pt; 
+}
+
+.topnav ul {
+    padding:0px 0px 0px 20px;
+    margin:0px 0px 0px 0px;
+}
+
+.topnav {
+    background-color: #eee;
+    border: 1px solid #ccc;
+    padding:10px 10px 10px 10px;
+    margin:0px 0px 10px 0px;
+}
+
+.section {  
+    margin-top: 12pt;   
+    margin-bottom: 12pt;
+    padding: 8pt; 
+    font-size: 9pt;   
+    line-height:9pt;  
+    background-color: #eee;
+    border: 1px solid #ccc; 
+    width:700px;   
+    overflow:auto;
+}
+.key {
+	color: #2929ff;
+}
+.deco {
+    color: #008000;
+}
+.event {
+    color: #008000;
+}
+.version {
+	font-size: 9pt; 
+}
