@@ -1,3 +1,4 @@
+setup.cfg
 setup.py
 Decovent.egg-info/PKG-INFO
 Decovent.egg-info/SOURCES.txt

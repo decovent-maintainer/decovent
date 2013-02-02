@@ -22,21 +22,51 @@ import logging
 import Queue
 import types
 
-asynchronous = False    # controls handlers execution mode
-debug = False           # activates logging based debugging
-encoding = 'UTF-8'      # encoding used to encode event/handler's name
-errors = 'strict'       # encoding errors
-exc_info = False        # controls sys.exc_info() return for faulty executions
-memoize = False         # activates memoization at global level
-threads = 3             # maximum threads started for handlers execution
-traceback = False       # controls traceback return for faulty executions
-
 log = logging.getLogger('decovent')
 
-_active = threading.BoundedSemaphore(value=3)
-_local = threading.local()
-_local.events = {}
-_memoize = {}
+
+class event_context(object):
+    """
+    light session container
+
+    . asynchronous
+        controls handlers execution mode
+    . debug
+        activates logging based debugging
+    . encoding
+        encoding used to encode event/handler's name
+    . errors
+        encoding errors
+    . exc_info
+        controls sys.exc_info() return for faulty executions
+    . memoize
+        activates memoization at global level
+    . threads
+        maximum threads started for handlers execution
+    . traceback
+        controls traceback return for faulty executions
+
+    """
+
+    def __init__(self, asynchronous=False, debug=False, encoding='UTF-8',
+                 errors='strict', exc_info=False, memoize=False,
+                 threads=3, traceback=False):
+
+        self.asynchronous = asynchronous
+        self.debug = debug
+        self.encoding = encoding
+        self.errors = errors
+        self.exc_info = exc_info
+        self.memoize = memoize
+        self.threads = threads
+        self.traceback = traceback
+
+        self.active = threading.BoundedSemaphore(value=3)
+        self.local = threading.local()
+        self.local.events = {}
+        self.memos = {}
+
+default_context = event_context()
 
 
 class raise_event(object):
@@ -51,11 +81,14 @@ class raise_event(object):
     - timeout - maximum time allocated for the event's execution
     """
 
-    def __init__(self, event=None, memoize_=False, lock=None, timeout=None):
+    def __init__(self, event=None, memoize_=False, lock=None, timeout=None,
+                 context=default_context):
+
         self.event = event
-        self.memoize = memoize_ or memoize
+        self.memoize = memoize_ or context.memoize
         self.lock = lock
         self.timeout = timeout
+        self.context = context
 
     def __call__(self, f):
         def wrapped_f(*args, **kwargs):
@@ -68,7 +101,7 @@ class raise_event(object):
             class_ = self._class(*args)
             hash_ = __builtins__['hash'](class_)
 
-            if debug and log.isEnabledFor(logging.DEBUG):
+            if self.context.debug and log.isEnabledFor(logging.DEBUG):
                 msg = 'Raising event %s.%s():%s'
                 log.debug(msg % (str(class_), self.event,
                                  f.func_code.co_firstlineno))
@@ -87,12 +120,12 @@ class raise_event(object):
                 for handler in handlers:
                     self.queue.put(handler)
 
-                    if asynchronous:
+                    if self.context.asynchronous:
                         #event, class, handler, memoize, timeout
                         e, c, h, m, t = handler
                         self.h_result.append((None, None, c, h))
 
-                if not asynchronous:
+                if not self.context.asynchronous:
                     self.queue.join()
 
             return (self.e_result, tuple(self.h_result))
@@ -132,7 +165,7 @@ class raise_event(object):
         """ Executes the event """
         info = '%s.%s()' % (str(self._class(args[0])), f.func_name)
 
-        if debug and log.isEnabledFor(logging.DEBUG):
+        if self.context.debug and log.isEnabledFor(logging.DEBUG):
             msg = '[%s] Processing event %s'
             log.debug(msg % (threading.current_thread().name, info))
 
@@ -145,8 +178,8 @@ class raise_event(object):
             result.extend((self._class(args[0]), f))
             return tuple(result)
         except Exception as err:
-            if exc_info:
-                if not traceback:
+            if self.context.exc_info:
+                if not self.context.traceback:
                     return (False, sys.exc_info()[:2], self._class(args[0]), f)
                 return (False, sys.exc_info(), self._class(args[0]), f)
             else:
@@ -155,7 +188,7 @@ class raise_event(object):
             if isinstance(self.lock, threading._RLock):
                 self.lock.release()
 
-            if debug and log.isEnabledFor(logging.DEBUG):
+            if self.context.debug and log.isEnabledFor(logging.DEBUG):
                 msg = '[%s] Processing of event %s is completed'
                 log.debug(msg % (threading.current_thread().name, info))
 
@@ -165,7 +198,6 @@ class raise_event(object):
         while True:
             try:
                 event, class_, handler, memoize_, timeout = self.queue.get()
-                memoize_ = memoize_ or memoize
 
                 if isinstance(self.lock, threading._RLock):
                     #synchronization
@@ -174,7 +206,7 @@ class raise_event(object):
                 try:
                     info = '%s.%s()' % (str(class_), handler.func_name)
 
-                    if debug and log.isEnabledFor(logging.DEBUG):
+                    if self.context.debug and log.isEnabledFor(logging.DEBUG):
                         msg = '[%s] Processing handler %s'
                         log.debug(msg % (threading.current_thread().name,
                                          info))
@@ -182,7 +214,7 @@ class raise_event(object):
                     args = list(args[:])
                     #switch 'self' to handler's class
                     args[0] = class_
-                    if not asynchronous:
+                    if not self.context.asynchronous:
                         result = self._memoize(memoize_, timeout,
                                                handler, *args, **kwargs)
                         result.extend((class_, handler))
@@ -191,9 +223,9 @@ class raise_event(object):
                         self._memoize(memoize_, timeout,
                                       handler, *args, **kwargs)
                 except Exception as err:
-                    if not asynchronous:
-                        if exc_info:
-                            if not traceback:
+                    if not self.context.asynchronous:
+                        if self.context.exc_info:
+                            if not self.context.traceback:
                                 self.h_result.append((False,
                                                       sys.exc_info()[:2],
                                                       class_, handler))
@@ -206,10 +238,10 @@ class raise_event(object):
                     if isinstance(self.lock, threading._RLock):
                         self.lock.release()
 
-                    if not asynchronous:
+                    if not self.context.asynchronous:
                         self.queue.task_done()
 
-                    if debug and log.isEnabledFor(logging.DEBUG):
+                    if self.context.debug and log.isEnabledFor(logging.DEBUG):
                         msg = '[%s] Processing of handler %s is completed'
                         log.debug(msg % (threading.current_thread().name,
                                          info))
@@ -220,19 +252,22 @@ class raise_event(object):
         """ Extracts registered handlers """
 
         handlers = []
-        if hash_ in _local.events:
-            for i in range(len(_local.events[hash_]) - 1, -1, -1):
-                event_, class_, handler, unregister,
-                memoize_, timeout = _local.events[hash_][i]
+        if hash_ in self.context.local.events:
+            for i in range(len(self.context.local.events[hash_]) - 1, -1, -1):
+                event_, class_, handler, unregister, \
+                    memoize_, timeout = self.context.local.events[hash_][i]
                 if event_ == event:
-                    handlers.append((event_, class_,
-                                     handler, memoize_, timeout))
+                    handlers.append((event_, class_, handler,
+                                     (memoize_ or self.context.memoize),
+                                     timeout))
                     if unregister:
-                        del _local.events[hash_][i]
-                        if len(_local.events[hash_]) == 0:
-                            del _local.events[hash_]
+                        del self.context.local.events[hash_][i]
+                        if len(self.context.local.events[hash_]) == 0:
+                            del self.context.local.events[hash_]
             handlers.reverse()
-            if handlers and debug and log.isEnabledFor(logging.DEBUG):
+            if ((handlers and self.context.debug and
+                 log.isEnabledFor(logging.DEBUG))):
+
                 for h in handlers:
                     event_, class_, handler, memoize_, timeout = h
                     msg = 'Event intercepted by %s.%s():%s'
@@ -248,7 +283,7 @@ class raise_event(object):
             hash = class_hash + func_hash + func_name
         """
         if not memoize_:
-            _active.acquire()
+            self.context.active.acquire()
             try:
                 if not isinstance(timeout, (int, float)) or timeout <= 0:
                     return [True, f(*args, **kwargs)]
@@ -258,25 +293,26 @@ class raise_event(object):
                 if isinstance(result, tuple) and len(result) == 3:
                     #error occurred
                     if isinstance(result[1], Exception):
-                        if exc_info:
-                            if not traceback:
+                        if self.context.exc_info:
+                            if not self.context.traceback:
                                 return [False, result[:2]]
                             return [False, result]
                         return [False, result[1]]
                 return [True, result]
             finally:
-                _active.release()
+                self.context.active.release()
         else:
             args_ = list(args[:])
             args_[0] = self._class(args_[0])
             hash_ = str(hash(args_[0])) + str(hash(f)) + '_' + f.func_name
 
-            if hash_ in _memoize:
-                for m in _memoize[hash_]:
+            if hash_ in self.context.memos:
+                for m in self.context.memos[hash_]:
                     _args, _kwargs, result = m
                     if _args == args_ and _kwargs == kwargs:
 
-                        if debug and log.isEnabledFor(logging.DEBUG):
+                        if ((self.context.debug and
+                             log.isEnabledFor(logging.DEBUG))):
                             msg = '[%s] Reading from cache: ' + \
                                   '%s.%s(args=%s, kwargs=%s)'
                             log.debug(msg % (threading.current_thread().name,
@@ -284,7 +320,7 @@ class raise_event(object):
                                              str(args), str(kwargs)))
                         return [True, result]
 
-            _active.acquire()
+            self.context.active.acquire()
             try:
                 if not isinstance(timeout, (int, float)) or timeout <= 0:
                     result = f(*args, **kwargs)
@@ -294,27 +330,29 @@ class raise_event(object):
                     if isinstance(result, tuple) and len(result) == 3:
                         #error occurred
                         if isinstance(result[1], Exception):
-                            if exc_info:
-                                if not traceback:
+                            if self.context.exc_info:
+                                if not self.context.traceback:
                                     return [False, result[:2]]
                                 return [False, result]
                             return [False, result[1]]
             finally:
-                _active.release()
+                self.context.active.release()
 
             lock = threading.RLock()
             lock.acquire()
             try:
-                if debug and log.isEnabledFor(logging.DEBUG):
+                if self.context.debug and log.isEnabledFor(logging.DEBUG):
                     msg = '[%s] Storing in cache: %s.%s(args=%s, kwargs=%s)'
                     log.debug(msg % (threading.current_thread().name,
                                      str(args_[0]), f.func_name,
                                      str(args), str(kwargs)))
 
-                if hash_ not in _memoize:
-                    _memoize[hash_] = []
+                if hash_ not in self.context.memos:
+                    self.context.memos[hash_] = []
 
-                _memoize[hash_].append((tuple(args_), kwargs, result))
+                self.context.memos[hash_].append(
+                    (tuple(args_), kwargs, result))
+
                 return [True, result]
             finally:
                 lock.release()
@@ -342,7 +380,7 @@ class raise_event(object):
         """ Calculates maximum number of threads that will be started
         """
 
-        t = threads
+        t = self.context.threads
         if not isinstance(t, int):
             t = 3
         if t < counter:
@@ -351,7 +389,7 @@ class raise_event(object):
 
     def _encode(self, value):
         if isinstance(value, unicode):
-            value = value.encode(encoding, errors)
+            value = value.encode(self.context.encoding, self.context.errors)
         return value
 
 
@@ -376,12 +414,13 @@ class set_handler(object):
     """
 
     def __init__(self, event, class_=None, unregister=False,
-                 memoize_=False, timeout=None):
+                 memoize_=False, timeout=None, context=default_context):
         self.class_ = class_
         self.event = self._encode(event)
         self.unregister = unregister
-        self.memoize = memoize_ or memoize
+        self.memoize = memoize_
         self.timeout = timeout
+        self.context = context
 
     def __call__(self, f):
         def wrapped_f(*args, **kwargs):
@@ -390,7 +429,7 @@ class set_handler(object):
             self.class_name = str(self.class_)
             self._check_e(self.class_, self.event)
 
-            if debug and log.isEnabledFor(logging.DEBUG):
+            if self.context.debug and log.isEnabledFor(logging.DEBUG):
                 msg = 'Registering handler for %s.%s'
                 log.debug(msg % (str(self.class_name), self.event))
 
@@ -400,10 +439,10 @@ class set_handler(object):
             h_class_hash = __builtins__['hash'](h_class)
             h_method_hash = __builtins__['hash'](f)
 
-            if not hash_ in _local.events:
-                _local.events[hash_] = []
+            if not hash_ in self.context.local.events:
+                self.context.local.events[hash_] = []
 
-            handlers = _local.events[hash_]
+            handlers = self.context.local.events[hash_]
             registered = False
 
             if handlers:
@@ -414,15 +453,17 @@ class set_handler(object):
                         if h_class_hash == __builtins__['hash'](class_):
                             if h_method_hash == __builtins__['hash'](handler):
                                 registered = True
-                                if debug and log.isEnabledFor(logging.DEBUG):
+                                if ((self.context.debug and
+                                     log.isEnabledFor(logging.DEBUG))):
                                     log.debug('Handler is already registered')
                                 break
             if not registered:
-                _local.events[hash_].append((self.event, h_class, f,
-                                             self.unregister,
-                                             self.memoize,
-                                             self.timeout))
-                if debug and log.isEnabledFor(logging.DEBUG):
+                self.context.local.events[hash_].append(
+                    (self.event, h_class, f,
+                     self.unregister,
+                     self.memoize,
+                     self.timeout))
+                if self.context.debug and log.isEnabledFor(logging.DEBUG):
                     log.debug('Handler was registered successfully')
         return wrapped_f
 
@@ -474,7 +515,7 @@ class set_handler(object):
 
     def _encode(self, value):
         if isinstance(value, unicode):
-            value = value.encode(encoding, errors)
+            value = value.encode(self.context.encoding, self.context.errors)
         return value
 
 
@@ -500,11 +541,10 @@ class spawn_thread(threading.Thread):
 
 def active(value):
     """ Controls the maximum number of concurrent executions """
-    global _active
-    _active = threading.BoundedSemaphore(value=value)
+    self.context.active = threading.BoundedSemaphore(value=value)
 
 
-def reset(class_=None, event=None):
+def reset(class_=None, event=None, context=default_context):
     """ Convenience method to reset events at
     global or class or (class, event) level
     """
@@ -514,22 +554,22 @@ def reset(class_=None, event=None):
         raise UnboundLocalError(msg)
 
     if class_ is None:
-        _local.events = {}
+        context.local.events = {}
         return
 
     hash_ = hash(class_)
-    if hash_ in _local.events:
+    if hash_ in context.local.events:
         if event is None:
-            del _local.events[hash_]
+            del context.local.events[hash_]
             return
 
         if isinstance(event, unicode):
-            event = event.encode(encoding, errors)
+            event = event.encode(context.encoding, context.errors)
 
-        for i in range(len(_local.events[hash_]) - 1, -1, -1):
+        for i in range(len(context.local.events[hash_]) - 1, -1, -1):
             event_, class_, handler, unregister, memoize_, timeout = \
-                _local.events[hash_][i]
+                context.local.events[hash_][i]
             if event_ == event:
-                del _local.events[hash_][i]
-                if len(_local.events[hash_]) == 0:
-                    del _local.events[hash_]
+                del context.local.events[hash_][i]
+                if len(context.local.events[hash_]) == 0:
+                    del context.local.events[hash_]
